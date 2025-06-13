@@ -1,0 +1,115 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<AdskVersion>2025</AdskVersion>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<InventorStdOlePath>C:\Program Files\Autodesk\Inventor $(AdskVersion)\Bin\stdole.dll</InventorStdOlePath>
+		<InventorInteropPath>C:\Program Files\Autodesk\Inventor $(AdskVersion)\Bin\Autodesk.Inventor.Interop.dll</InventorInteropPath>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<TargetFrameworks>net4.8; net8.0-windows</TargetFrameworks>
+	</PropertyGroup>
+
+	<!--<PropertyGroup Condition="'$(AdskVersion)' &lt;= '2025'">
+		<TargetFramework>net8.0-windows</TargetFramework>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(AdskVersion)' &lt;= '2024'">
+		<TargetFramework>net4.8</TargetFramework>
+	</PropertyGroup>-->
+
+	<PropertyGroup>
+		<ApplicationIcon>Resources\EvilRabbit.ico</ApplicationIcon>
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<PackageIcon>EvilRabbit.png</PackageIcon>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<RepositoryType>git</RepositoryType>
+		<PackageLicenseFile>LICENSE.md</PackageLicenseFile>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<Authors>wh7r4bb17</Authors>
+		<Company>wh7r4bb17</Company>
+		<Copyright>Copyright © 2025</Copyright>
+		<Cert>wh7r4bb17</Cert>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<AssemblyTitle>InventorRibbonManager</AssemblyTitle>
+		<PackageId>wh7r4bb17.InventorRibbonManager</PackageId>
+		<Description>Helper library to create Ribbontabs, -panels and -buttons for Inventor Addins.</Description>
+		<Product>InventorRibbonManager.dll</Product>
+		<Version>1.0.0</Version>
+		<AssemblyVersion>$(Version)</AssemblyVersion>
+		<FileVersion>$(Version)</FileVersion>
+		<UseWindowsForms>true</UseWindowsForms>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<RepositoryUrl>https://github.com/wh7r4bb17/InventorRibbonManager/tree/master/InventorRibbonManager</RepositoryUrl>
+		<PackageProjectUrl>https://github.com/wh7r4bb17/InventorRibbonManager</PackageProjectUrl>
+		<Title>wh7r4bb17.InventorRibbonManager</Title>
+		<PackageTags>Inventor; Addin, Ribbon</PackageTags>
+	</PropertyGroup>
+
+	<Choose>
+		<When Condition="Exists('$(InventorStdOlePath)')">
+			<ItemGroup>
+				<Reference Include="stdole">
+					<HintPath>$(InventorStdOlePath)</HintPath>
+					<Private>True</Private>
+				</Reference>
+			</ItemGroup>
+		</When>
+		<Otherwise>
+			<ItemGroup>
+				<Reference Include="stdole">
+					<HintPath>referenced libs\stdole.dll</HintPath>
+					<Private>true</Private>
+				</Reference>
+			</ItemGroup>
+		</Otherwise>
+	</Choose>
+
+	<Choose>
+		<When Condition="Exists('$(InventorInteropPath)')">
+			<ItemGroup>
+				<Reference Include="Autodesk.Inventor.Interop">
+					<HintPath>$(InventorInteropPath)</HintPath>
+					<Private>False</Private>
+					<EmbedInteropTypes>False</EmbedInteropTypes>
+				</Reference>
+			</ItemGroup>
+		</When>
+		<Otherwise>
+			<ItemGroup>
+				<Reference Include="Autodesk.Inventor.Interop">
+					<HintPath>referenced libs\Autodesk.Inventor.Interop.dll</HintPath>
+					<Private>true</Private>
+					<EmbedInteropTypes>False</EmbedInteropTypes>
+				</Reference>
+			</ItemGroup>
+		</Otherwise>
+	</Choose>
+
+
+	<ItemGroup>
+		<None Update="**\*.pdb">
+			<Pack>false</Pack>
+		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="docs\README.md" Pack="True" PackagePath="\" />
+		<None Include=".editorconfig" />
+		<None Include="Resources\EvilRabbit.png" Pack="True" PackagePath="\" Link="Resources\EvilRabbit.png" />
+		<None Include="..\LICENSE.md" Pack="True" PackagePath="\" Link="docs\LICENSE.md" />
+	</ItemGroup>
+
+	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+		<Exec Condition="'$(Configuration)' == 'Release' And Exists('$(Sign)\SignFiles.exe')" Command="echo Sign Output File: '$(TargetDir)$(TargetFileName)'..." />
+		<Exec Condition="'$(Configuration)' == 'Release' And Exists('$(Sign)\SignFiles.exe')" Command="&quot;$(Sign)\SignFiles.exe&quot; &quot;$(TargetDir)$(TargetFileName)&quot; $(Cert)" />
+	</Target>
+</Project>

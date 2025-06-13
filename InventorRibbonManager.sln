@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36127.28
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InventorRibbonManager", "InventorRibbonManager\InventorRibbonManager.csproj", "{3B82349D-2A54-4916-9B70-A40DC24BC052}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sample Addin", "Sample Addin\Sample Addin.csproj", "{9A6BDA0A-2B64-1D15-D16D-A1D78B88A52F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution items", "Solution items", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+	ProjectSection(SolutionItems) = preProject
+		.github\workflows\nuget-pack.yml = .github\workflows\nuget-pack.yml
+		readme.md = readme.md
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{3B82349D-2A54-4916-9B70-A40DC24BC052}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3B82349D-2A54-4916-9B70-A40DC24BC052}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3B82349D-2A54-4916-9B70-A40DC24BC052}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3B82349D-2A54-4916-9B70-A40DC24BC052}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9A6BDA0A-2B64-1D15-D16D-A1D78B88A52F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9A6BDA0A-2B64-1D15-D16D-A1D78B88A52F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9A6BDA0A-2B64-1D15-D16D-A1D78B88A52F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9A6BDA0A-2B64-1D15-D16D-A1D78B88A52F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {2D458655-2F0C-4522-9641-691EF597388B}
+	EndGlobalSection
+EndGlobal
