@@ -259,8 +259,33 @@ namespace InventorRibbonManager
             #region Methods
             public ICommandControl AddButton(IButtonDefinition buttonDef, bool useLargeIcon, RibbonType environment = RibbonType.All)
                 {
+                try
+                    {
+                    if (_panel.CommandControls[buttonDef.InternalName] is CommandControl existing)
+                        {
+                        return new CommandControlWrapper(existing, environment);
+                        }
+                    }
+                catch (System.Runtime.InteropServices.COMException)
+                    {
+                    }
+                catch (ArgumentException Argex)
+                    {
+                    }
+                catch (Exception ex)
+                    {
+                    }
+
+                try
+                    {
                 CommandControl newCtrl = _panel.CommandControls.AddButton(buttonDef.InventorButtonDefinition, useLargeIcon);
                 return new CommandControlWrapper(newCtrl, environment);
+                }
+                catch (Exception ex)
+                    {
+                    return null;
+                    }
+
                 }
 
             public ICommandControl AddButtonToSlideout(IButtonDefinition buttonDef, RibbonType environment = RibbonType.All)
