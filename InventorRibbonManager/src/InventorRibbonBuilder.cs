@@ -278,9 +278,9 @@ namespace InventorRibbonManager
 
                 try
                     {
-                CommandControl newCtrl = _panel.CommandControls.AddButton(buttonDef.InventorButtonDefinition, useLargeIcon);
-                return new CommandControlWrapper(newCtrl, environment);
-                }
+                    CommandControl newCtrl = _panel.CommandControls.AddButton(buttonDef.InventorButtonDefinition, useLargeIcon);
+                    return new CommandControlWrapper(newCtrl, environment);
+                    }
                 catch (Exception ex)
                     {
                     return null;
