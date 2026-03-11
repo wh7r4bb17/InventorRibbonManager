@@ -33,7 +33,7 @@
 	<PropertyGroup>
 		<Authors>wh7r4bb17</Authors>
 		<Company>wh7r4bb17</Company>
-		<Copyright>Copyright © 2025</Copyright>
+		<Copyright>Copyright © 2025-2026</Copyright>
 		<Cert>wh7r4bb17</Cert>
 	</PropertyGroup>
 
@@ -42,7 +42,7 @@
 		<PackageId>wh7r4bb17.InventorRibbonManager</PackageId>
 		<Description>Helper library to create Ribbontabs, -panels and -buttons for Inventor Addins.</Description>
 		<Product>InventorRibbonManager.dll</Product>
-		<Version>1.0.0</Version>
+		<Version>1.0.1</Version>
 		<AssemblyVersion>$(Version)</AssemblyVersion>
 		<FileVersion>$(Version)</FileVersion>
 		<UseWindowsForms>true</UseWindowsForms>
