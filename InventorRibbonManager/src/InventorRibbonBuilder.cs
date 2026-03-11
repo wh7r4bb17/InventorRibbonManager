@@ -353,6 +353,8 @@ namespace InventorRibbonManager
             public ICommandControl AddPopup(IButtonDefinition displayedControl, IEnumerable<IButtonDefinition> additionalButtons, bool useLargeIcon, RibbonType environment = RibbonType.All)
                 {
                 ObjectCollection defs = _panel.Parent.Application.TransientObjects.CreateObjectCollection();
+                if (additionalButtons == null)
+                    { return null; }
                 foreach (IButtonDefinition def in additionalButtons)
                     {
                     defs.Add(def.InventorButtonDefinition);
