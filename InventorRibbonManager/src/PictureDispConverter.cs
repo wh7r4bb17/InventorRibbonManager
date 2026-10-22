@@ -25,7 +25,7 @@ namespace InventorRibbonManager
             return _ToIPictureDisp(bmp);
             }
 
-        internal static stdole.IPictureDisp GetFromPath(string path)
+        internal static stdole.IPictureDisp? GetFromPath(string path)
             {
             if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
                 { return null; }

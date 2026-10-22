@@ -34,7 +34,7 @@ namespace InventorRibbonManager
         /// <value>
         /// An object understood by the Inventor API as the large icon representation.
         /// </value>
-        object LargeIcon { get; }
+        object? LargeIcon { get; }
 
         /// <summary>
         /// Gets or sets a value indicating whether the button is currently in the pressed state.
@@ -47,7 +47,7 @@ namespace InventorRibbonManager
         /// <value>
         /// An object understood by the Inventor API as the standard icon representation.
         /// </value>
-        object StandardIcon { get; }
+        object? StandardIcon { get; }
 
         #endregion Properties
 
