@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace InventorRibbonManager
     {
-    public sealed class PictureDispConverter
+    internal sealed class PictureDispConverter
         {
         #region Fields
         [DllImport("OleAut32.dll", EntryPoint = "OleCreatePictureIndirect", ExactSpelling = true, PreserveSig = false)]
@@ -15,17 +15,17 @@ namespace InventorRibbonManager
         #endregion Fields
 
         #region Methods
-        public static stdole.IPictureDisp ToIPictureDisp(System.Drawing.Icon icon)
+        internal static stdole.IPictureDisp ToIPictureDisp(System.Drawing.Icon icon)
             {
             return _ToIPictureDisp(icon);
             }
 
-        public static stdole.IPictureDisp ToIPictureDisp(System.Drawing.Bitmap bmp)
+        internal static stdole.IPictureDisp ToIPictureDisp(System.Drawing.Bitmap bmp)
             {
             return _ToIPictureDisp(bmp);
             }
 
-        public static stdole.IPictureDisp GetFromPath(string path)
+        internal static stdole.IPictureDisp GetFromPath(string path)
             {
             if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
                 { return null; }
