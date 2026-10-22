@@ -7,22 +7,33 @@ using System.Linq;
 //https://help.autodesk.com/view/INVNTOR/2025/ENU/?guid=GUID-RibbonPanel
 //https://help.autodesk.com/view/INVNTOR/2025/ENU/?guid=GUID-CommandControls
 
-
 namespace InventorRibbonManager
     {
+    /// <summary>
+    /// Creates and manages Autodesk Inventor ribbon tabs and panels for an add-in.
+    /// </summary>
     public class InventorRibbonBuilder : IDisposable
         {
         #region Fields
-        private Inventor.Application _app;
-        internal static string _guid;
+        private readonly string _clientId;
+        private Inventor.Application? _app;
 
         #endregion Fields
 
         #region Constructor
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="InventorRibbonBuilder"/> class.
+        /// </summary>
+        /// <param name="app">The active Inventor application instance.</param>
+        /// <param name="guid">The add-in client identifier used to create ribbon elements.</param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="app"/> or <paramref name="guid"/> is null.
+        /// </exception>
         public InventorRibbonBuilder(Inventor.Application app, string guid)
             {
-            _app = app;
-            _guid = guid;
+            _app = app ?? throw new ArgumentNullException(nameof(app));
+            _clientId = !string.IsNullOrWhiteSpace(guid) ? guid : throw new ArgumentException("The add-in client identifier must not be null or empty.", nameof(guid));
             }
 
         #endregion Constructor
@@ -37,169 +48,722 @@ namespace InventorRibbonManager
         #endregion Dispose
 
         #region Methods
-        public IRibbonTab CreateOrGetTab(RibbonType ribbonType, string name, string internalName)
-            {
-            Ribbon ribbon = GetRibbon(ribbonType);
-            RibbonTab tab = null;
 
-            foreach (RibbonTab _tab in ribbon.RibbonTabs)
-                {
-                if (_tab.InternalName == internalName)
-                    {
-                    tab = _tab;
-                    break;
-                    }
-                }
-
-            if (tab == null)
-                { tab = ribbon.RibbonTabs.Add(name, internalName, _guid); }
-
-            return new RibbonTabWrapper(tab);
-            }
-
-        public void RegisterPanelForRibbons(
-            string tabName,
-            string tabInternalName,
-            string panelDisplayName,
-            string panelInternalName,
-            RibbonType ribbonTypes,
-            Action<IRibbonPanel, RibbonType> configurePanel)
-            {
-            foreach (RibbonType type in (RibbonType[])Enum.GetValues(typeof(RibbonType)))
-                {
-                if (type == RibbonType.None || !ribbonTypes.HasFlag(type) || type == RibbonType.All)
-                    { continue; }
-
-                var tab = CreateOrGetTab(type, tabName, tabInternalName);
-                var panel = tab.AddPanel(panelDisplayName, panelInternalName);
-                configurePanel?.Invoke(panel, type);
-                }
-            }
-
-        public void RegisterPanelForRibbons(
-            string tabName,
-            string tabInternalName,
-            string panelDisplayName,
-            string panelInternalName,
-            Action<IRibbonPanel, RibbonType> configurePanel)
-            {
-            foreach (RibbonType type in (RibbonType[])Enum.GetValues(typeof(RibbonType)))
-                {
-                if (type == RibbonType.None || type == RibbonType.All)
-                    { continue; }
-
-                var tab = CreateOrGetTab(type, tabName, tabInternalName);
-                var panel = tab.AddPanel(panelDisplayName, panelInternalName);
-                configurePanel?.Invoke(panel, type);
-                }
-            }
-
+        /// <summary>
+        /// Creates all ribbon panels and registers all buttons for the specified tab in the requested ribbon environments.
+        /// </summary>
+        /// <param name="ribbonBuilder">The ribbon builder used to create tabs and panels.</param>
+        /// <param name="tabName">The display name of the ribbon tab.</param>
+        /// <param name="tabInternalName">The internal name of the ribbon tab.</param>
+        /// <param name="buttons">The button definitions to place on the tab.</param>
+        /// <exception cref="ArgumentNullException">
+        /// Thrown when <paramref name="ribbonBuilder"/> or <paramref name="buttons"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="tabName"/> or <paramref name="tabInternalName"/> is null or empty.
+        /// </exception>
         public static void CreatePanelsAndButtonsForTab(InventorRibbonBuilder ribbonBuilder, string tabName, string tabInternalName, IEnumerable<IPanelButton> buttons)
             {
-            var registered = new HashSet<(string ButtonInternalName, RibbonType Env)>();
-            RibbonType[] allEnvs = Enum.GetValues(typeof(RibbonType))
-                .Cast<RibbonType>()
-                .Where(e => e != RibbonType.None && e != RibbonType.All)
-                .ToArray();
+            if (ribbonBuilder == null)
+                { throw new ArgumentNullException(nameof(ribbonBuilder)); }
 
-            foreach (RibbonType env in allEnvs)
+            if (buttons == null)
+                { throw new ArgumentNullException(nameof(buttons)); }
+
+            if (string.IsNullOrWhiteSpace(tabName))
+                { throw new ArgumentException("The tab name must not be null or empty.", nameof(tabName)); }
+
+            if (string.IsNullOrWhiteSpace(tabInternalName))
+                { throw new ArgumentException("The internal tab name must not be null or empty.", nameof(tabInternalName)); }
+
+            List<IPanelButton> buttonList = buttons.ToList();
+
+            // Prevent duplicate registration of the same button in the same ribbon environment.
+            HashSet<(string ButtonInternalName, RibbonType Environment)> registered = new HashSet<(string ButtonInternalName, RibbonType Environment)>();
+
+            // Build the UI once per concrete Inventor ribbon environment.
+            foreach (RibbonType env in GetSingleRibbonTypes())
                 {
-                List<IPanelButton> buttonsForEnv = buttons
-                    .Where(btn => (btn.Environment & env) != 0
-                                 && !registered.Contains((btn.InternalName, env)))
+                List<IPanelButton> buttonsForEnvironment = buttonList
+                    .Where(button => button.Environment.HasFlag(env))
                     .ToList();
-                foreach (var panelGroup in buttonsForEnv.GroupBy(b => (b.PanelName, b.PanelInternalName)))
+
+                if (buttonsForEnvironment.Count == 0)
+                    { continue; }
+
+                // Group buttons by target panel so each panel is created only once per environment.
+                foreach (var panelGroup in buttonsForEnvironment.GroupBy(b => (b.PanelName, b.PanelInternalName)))
                     {
-                    ribbonBuilder.RegisterPanelForRibbons(
-                        tabName,
-                        tabInternalName,
-                        panelGroup.Key.PanelName,
-                        panelGroup.Key.PanelInternalName,
-                        (panel, currentEnv) =>
+                    if (string.IsNullOrWhiteSpace(panelGroup.Key.PanelName))
+                        { throw new ArgumentException("A button definition contains an empty panel name.", nameof(buttons)); }
+
+                    if (string.IsNullOrWhiteSpace(panelGroup.Key.PanelInternalName))
+                        { throw new ArgumentException("A button definition contains an empty internal panel name.", nameof(buttons)); }
+
+                    // Register the panel only for the current environment.
+                    ribbonBuilder.RegisterPanelForRibbons(tabName, tabInternalName, panelGroup.Key.PanelName,
+                        panelGroup.Key.PanelInternalName, env, (panel, currentEnvironment) =>
                         {
-                            if (currentEnv != env)
-                                { return; }
-                            foreach (IPanelButton btn in panelGroup)
+                            foreach (IPanelButton button in panelGroup)
                                 {
-                                if (!registered.Add((btn.InternalName, env)))
+                                // Skip duplicate button registrations for the same environment.
+                                if (!registered.Add((button.InternalName, currentEnvironment)))
                                     { continue; }
-                                btn.AddToPanel(panel, env);
+
+                                button.AddToPanel(panel, currentEnvironment);
                                 }
-                        }
-                    );
+                        });
                     }
                 }
+            }
 
-            foreach (RibbonType env in new[] { RibbonType.All })
+        /// <summary>
+        /// Creates a ribbon tab if it does not already exist, or returns the existing tab.
+        /// </summary>
+        /// <param name="ribbonType">The target ribbon environment.</param>
+        /// <param name="name">The display name of the tab.</param>
+        /// <param name="internalName">The internal name of the tab.</param>
+        /// <returns>An <see cref="IRibbonTab"/> instance for the requested ribbon tab.</returns>
+        public IRibbonTab CreateOrGetTab(RibbonType ribbonType, string name, string internalName)
+            {
+            if (string.IsNullOrWhiteSpace(name))
+                { throw new ArgumentException("The tab name must not be null or empty.", nameof(name)); }
+
+            if (string.IsNullOrWhiteSpace(internalName))
+                { throw new ArgumentException("The internal tab name must not be null or empty.", nameof(internalName)); }
+
+            Ribbon ribbon = GetRibbon(ribbonType);
+
+            foreach (RibbonTab tab in ribbon.RibbonTabs)
                 {
-                List<IPanelButton> buttonsForEnv = buttons
-                    .Where(btn =>
-                        btn.Environment == RibbonType.All &&
-                        !allEnvs.Any(singleEnv => (btn.Environment & singleEnv) != 0 &&
-                        registered.Contains((btn.InternalName, singleEnv))) &&
-                        !registered.Contains((btn.InternalName, env))
-                    )
-                    .ToList();
-                foreach (var panelGroup in buttonsForEnv.GroupBy(b => (b.PanelName, b.PanelInternalName)))
-                    {
-                    ribbonBuilder.RegisterPanelForRibbons(
-                        tabName,
-                        tabInternalName,
-                        panelGroup.Key.PanelName,
-                        panelGroup.Key.PanelInternalName,
-                        (panel, currentEnv) =>
-                        {
-                            if (currentEnv != env)
-                                { return; }
-                            foreach (IPanelButton btn in panelGroup)
-                                {
-                                if (!registered.Add((btn.InternalName, env)))
-                                    { continue; }
-                                btn.AddToPanel(panel, env);
-                                }
-                        }
-                    );
-                    }
+                if (string.Equals(tab.InternalName, internalName, StringComparison.Ordinal))
+                    { return new RibbonTabWrapper(tab, _clientId); }
                 }
+
+            RibbonTab newTab = ribbon.RibbonTabs.Add(name, internalName, _clientId);
+            return new RibbonTabWrapper(newTab, _clientId);
+            }
+
+        /// <summary>
+        /// Creates or gets a ribbon panel in all specified ribbon environments and invokes an optional callback
+        /// to configure the panel for each environment.
+        /// </summary>
+        /// <param name="tabName">The display name of the ribbon tab.</param>
+        /// <param name="tabInternalName">The internal name of the ribbon tab.</param>
+        /// <param name="panelDisplayName">The display name of the ribbon panel.</param>
+        /// <param name="panelInternalName">The internal name of the ribbon panel.</param>
+        /// <param name="ribbonTypes">
+        /// A flag combination of ribbon environments in which the panel should be created,
+        /// for example <see cref="RibbonType.Part"/> | <see cref="RibbonType.Assembly"/>.
+        /// </param>
+        /// <param name="configurePanel">
+        /// An optional callback that is invoked for each created or existing panel together with its ribbon environment.
+        /// </param>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="tabName"/>, <paramref name="tabInternalName"/>,
+        /// <paramref name="panelDisplayName"/>, or <paramref name="panelInternalName"/> is null or empty.
+        /// </exception>
+        public void RegisterPanelForRibbons(string tabName, string tabInternalName, string panelDisplayName, string panelInternalName, RibbonType ribbonTypes, Action<IRibbonPanel, RibbonType> configurePanel)
+            {
+            if (string.IsNullOrWhiteSpace(tabName))
+                { throw new ArgumentException("The tab name must not be null or empty.", nameof(tabName)); }
+
+            if (string.IsNullOrWhiteSpace(tabInternalName))
+                { throw new ArgumentException("The internal tab name must not be null or empty.", nameof(tabInternalName)); }
+
+            if (string.IsNullOrWhiteSpace(panelDisplayName))
+                { throw new ArgumentException("The panel display name must not be null or empty.", nameof(panelDisplayName)); }
+
+            if (string.IsNullOrWhiteSpace(panelInternalName))
+                { throw new ArgumentException("The internal panel name must not be null or empty.", nameof(panelInternalName)); }
+
+            foreach (RibbonType type in GetSingleRibbonTypes())
+                {
+                if (!ribbonTypes.HasFlag(type))
+                    { continue; }
+
+                IRibbonTab tab = CreateOrGetTab(type, tabName, tabInternalName);
+                IRibbonPanel panel = tab.AddPanel(panelDisplayName, panelInternalName);
+                configurePanel?.Invoke(panel, type);
+                }
+            }
+
+        /// <summary>
+        /// Creates or gets a ribbon panel in all supported ribbon environments and invokes an optional callback
+        /// to configure the panel for each environment.
+        /// </summary>
+        /// <param name="tabName">The display name of the ribbon tab.</param>
+        /// <param name="tabInternalName">The internal name of the ribbon tab.</param>
+        /// <param name="panelDisplayName">The display name of the ribbon panel.</param>
+        /// <param name="panelInternalName">The internal name of the ribbon panel.</param>
+        /// <param name="configurePanel">
+        /// An optional callback that is invoked for each created or existing panel together with its ribbon environment.
+        /// </param>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="tabName"/>, <paramref name="tabInternalName"/>,
+        /// <paramref name="panelDisplayName"/>, or <paramref name="panelInternalName"/> is null or empty.
+        /// </exception>
+        public void RegisterPanelForRibbons(string tabName, string tabInternalName, string panelDisplayName, string panelInternalName, Action<IRibbonPanel, RibbonType> configurePanel)
+            {
+            RegisterPanelForRibbons(tabName, tabInternalName, panelDisplayName, panelInternalName, RibbonType.All, configurePanel);
             }
 
         #endregion Methods
 
         #region private Methods
-        private Ribbon GetRibbon(RibbonType ribbonType)
+
+        /// <summary>
+        /// Gets the Autodesk Inventor internal ribbon name for a single ribbon environment.
+        /// </summary>
+        /// <param name="ribbonType">The ribbon environment.</param>
+        /// <returns>The internal Inventor ribbon name.</returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="ribbonType"/> is not a single supported ribbon environment.
+        /// </exception>
+        private static string GetRibbonNameFromRibbonType(RibbonType ribbonType)
             {
-            Ribbons ribbons = _app.UserInterfaceManager.Ribbons;
-            string ribbonName = GetRibbonNameFromRibbonType(ribbonType);
-            return ribbons[ribbonName];
+            if (!IsSingleRibbonType(ribbonType) || ribbonType == RibbonType.None || ribbonType == RibbonType.All)
+                { throw new ArgumentException("The ribbon type must be a single supported ribbon environment.", nameof(ribbonType)); }
+
+            return ribbonType switch
+                {
+                    RibbonType.ZeroDoc => "ZeroDoc",
+                    RibbonType.Part => "Part",
+                    RibbonType.Assembly => "Assembly",
+                    RibbonType.Drawing => "Drawing",
+                    RibbonType.Presentation => "Presentation",
+                    _ => throw new ArgumentOutOfRangeException(nameof(ribbonType), ribbonType, "Unsupported ribbon type."),
+                    };
             }
 
-        private string GetRibbonNameFromRibbonType(RibbonType ribbonType)
+        private static IEnumerable<RibbonType> GetSingleRibbonTypes()
             {
-            if (ribbonType.HasFlag(RibbonType.Part))
-                { return "Part"; }
-            if (ribbonType.HasFlag(RibbonType.Assembly))
-                { return "Assembly"; }
-            if (ribbonType.HasFlag(RibbonType.Drawing))
-                { return "Drawing"; }
-            if (ribbonType.HasFlag(RibbonType.Presentation))
-                { return "Presentation"; }
-            return "ZeroDoc";
+            yield return RibbonType.ZeroDoc;
+            yield return RibbonType.Part;
+            yield return RibbonType.Assembly;
+            yield return RibbonType.Drawing;
+            yield return RibbonType.Presentation;
+            }
+
+        /// <summary>
+        /// Determines whether the specified ribbon type contains exactly one ribbon environment flag.
+        /// </summary>
+        /// <param name="ribbonType">The ribbon type to test.</param>
+        /// <returns>
+        /// <see langword="true"/> if the value contains exactly one ribbon environment flag;
+        /// otherwise, <see langword="false"/>.
+        /// </returns>
+        private static bool IsSingleRibbonType(RibbonType ribbonType)
+            {
+            int value = (int)ribbonType;
+            return value != 0 && (value & (value - 1)) == 0;
+            }
+
+        /// <summary>
+        /// Gets the Autodesk Inventor ribbon for the specified ribbon environment.
+        /// </summary>
+        /// <param name="ribbonType">The ribbon environment.</param>
+        /// <returns>The matching Inventor <see cref="Ribbon"/>.</returns>
+        /// <exception cref="ObjectDisposedException">
+        /// Thrown when the current <see cref="InventorRibbonBuilder"/> instance has already been disposed.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// Thrown when <paramref name="ribbonType"/> is not a single supported ribbon environment.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the requested ribbon cannot be found in the current Inventor user interface.
+        /// </exception>
+        private Ribbon GetRibbon(RibbonType ribbonType)
+            {
+            if (_app == null)
+                { throw new ObjectDisposedException(nameof(InventorRibbonBuilder)); }
+
+            string ribbonName = GetRibbonNameFromRibbonType(ribbonType);
+            Ribbons ribbons = _app.UserInterfaceManager.Ribbons;
+
+            try
+                {
+                return ribbons[ribbonName];
+                }
+            catch (Exception ex)
+                {
+                throw new InvalidOperationException($"The Inventor ribbon '{ribbonName}' for ribbon type '{ribbonType}' could not be found.", ex);
+                }
             }
 
         #endregion private Methods
 
-        public class RibbonTabWrapper : IRibbonTab
+        #region Classes
+
+        /// <inheritdoc />
+        public class ComboBoxDefinitionWrapper : IComboBoxDefinition
+            {
+            #region Properties
+
+            /// <inheritdoc />
+            public string InternalName => InventorComboBoxDefinition.InternalName;
+
+            /// <inheritdoc />
+            public ComboBoxDefinition InventorComboBoxDefinition { get; }
+
+            #endregion Properties
+
+            #region Constructor
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="ComboBoxDefinitionWrapper"/> class.
+            /// </summary>
+            /// <param name="comboBoxDefinition">The Inventor combo box definition to wrap.</param>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="comboBoxDefinition"/> is <see langword="null"/>.
+            /// </exception>
+            public ComboBoxDefinitionWrapper(ComboBoxDefinition comboBoxDefinition)
+                {
+                InventorComboBoxDefinition = comboBoxDefinition ?? throw new ArgumentNullException(nameof(comboBoxDefinition));
+                }
+
+            #endregion Constructor
+            }
+
+        /// <inheritdoc />
+        public class CommandControlWrapper : ICommandControl
             {
             #region Fields
+            private readonly CommandControl _control;
+
+            #endregion Fields
+
+            #region Properties
+
+            /// <inheritdoc />
+            public RibbonType Environment { get; }
+
+            /// <inheritdoc />
+            public string InternalName => _control.InternalName;
+
+            /// <inheritdoc />
+            public object InventorControl => _control;
+
+            #endregion Properties
+
+            #region Constructor
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="CommandControlWrapper"/> class.
+            /// </summary>
+            /// <param name="control">The Inventor command control to wrap.</param>
+            /// <param name="environment">The ribbon environment in which the command control exists.</param>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="control"/> is <see langword="null"/>.
+            /// </exception>
+            public CommandControlWrapper(CommandControl control, RibbonType environment)
+                {
+                _control = control ?? throw new ArgumentNullException(nameof(control));
+                Environment = environment;
+                }
+
+            #endregion Constructor
+            }
+
+        /// <inheritdoc />
+        public sealed class CustomButtonDefinition : IButtonDefinition, IDisposable
+            {
+            #region Fields
+            private readonly Action? _executeAction;
+
+            private bool _disposed;
+
+            #endregion Fields
+
+            #region Properties
+
+            /// <inheritdoc />
+            public string DisplayName => InventorButtonDefinition.DisplayName;
+
+            /// <inheritdoc />
+            public RibbonType Environment { get; }
+
+            /// <inheritdoc />
+            public string InternalName => InventorButtonDefinition.InternalName;
+
+            /// <summary>
+            /// Gets the wrapped Inventor <see cref="ButtonDefinition"/>.
+            /// </summary>
+            public ButtonDefinition InventorButtonDefinition { get; }
+
+            /// <inheritdoc />
+            public object? LargeIcon { get; }
+
+            /// <inheritdoc />
+            public bool Pressed { get; set; }
+
+            /// <inheritdoc />
+            public object? StandardIcon { get; }
+
+            #endregion Properties
+
+            #region Constructor
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="CustomButtonDefinition"/> class.
+            /// </summary>
+            /// <param name="definition">The underlying Inventor button definition.</param>
+            /// <param name="environment">The ribbon environment in which the button is intended to be used.</param>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="definition"/> is <see langword="null"/>.
+            /// </exception>
+            public CustomButtonDefinition(ButtonDefinition definition, RibbonType environment = RibbonType.All)
+                : this(definition, null, environment)
+                { }
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="CustomButtonDefinition"/> class.
+            /// </summary>
+            /// <param name="definition">The underlying Inventor button definition.</param>
+            /// <param name="onExecute">The action to invoke when the button is executed.</param>
+            /// <param name="environment">The ribbon environment in which the button is intended to be used.</param>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="definition"/> is <see langword="null"/>.
+            /// </exception>
+            public CustomButtonDefinition(ButtonDefinition definition, Action? onExecute, RibbonType environment = RibbonType.All)
+                {
+                InventorButtonDefinition = definition ?? throw new ArgumentNullException(nameof(definition));
+                _executeAction = onExecute;
+                Environment = environment;
+
+                InventorButtonDefinition.OnExecute += OnExecute;
+                }
+
+            #endregion Constructor
+
+            #region Dispose
+
+            /// <summary>
+            /// Unsubscribes the registered execute handler.
+            /// </summary>
+            public void Dispose()
+                {
+                if (_disposed)
+                    { return; }
+                InventorButtonDefinition.OnExecute -= OnExecute;
+                _disposed = true;
+
+                GC.SuppressFinalize(this);
+                }
+
+            #endregion Dispose
+
+            #region Methods
+
+            /// <inheritdoc />
+            public void Execute()
+                {
+                _executeAction?.Invoke();
+                }
+
+            #endregion Methods
+
+            #region private Methods
+
+            private void OnExecute(NameValueMap context)
+                {
+                _executeAction?.Invoke();
+                }
+
+            #endregion private Methods
+            }
+
+        /// <inheritdoc />
+        public sealed class RibbonPanelWrapper : IRibbonPanel
+            {
+            #region Fields
+            private readonly RibbonPanel _panel;
+
+            #endregion Fields
+
+            #region Properties
+
+            /// <inheritdoc />
+            public string InternalName => _panel.InternalName;
+
+            /// <inheritdoc />
+            public string Name => _panel.DisplayName;
+
+            #endregion Properties
+
+            #region Constructor
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="RibbonPanelWrapper"/> class.
+            /// </summary>
+            /// <param name="panel">The Inventor ribbon panel to wrap.</param>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="panel"/> is <see langword="null"/>.
+            /// </exception>
+            public RibbonPanelWrapper(RibbonPanel panel)
+                {
+                _panel = panel ?? throw new ArgumentNullException(nameof(panel));
+                }
+
+            #endregion Constructor
+
+            #region Methods
+
+            /// <inheritdoc />
+            public ICommandControl AddButton(IButtonDefinition buttonDef, bool useLargeIcon, RibbonType environment = RibbonType.All)
+                {
+                if (buttonDef == null)
+                    { throw new ArgumentNullException(nameof(buttonDef)); }
+
+                try
+                    {
+                    if (_panel.CommandControls[buttonDef.InternalName] is CommandControl existing)
+                        { return new CommandControlWrapper(existing, environment); }
+                    }
+                catch (System.Runtime.InteropServices.COMException)
+                    {
+                    // The control does not exist yet. Create it below.
+                    }
+                catch (ArgumentException)
+                    {
+                    // The control does not exist yet. Create it below.
+                    }
+
+                CommandControl newControl = _panel.CommandControls.AddButton(buttonDef.InventorButtonDefinition, useLargeIcon);
+                return new CommandControlWrapper(newControl, environment);
+                }
+
+            /// <inheritdoc />
+            public ICommandControl AddButtonPopup(IEnumerable<IButtonDefinition> buttonDefinitions, bool useLargeIcon, RibbonType environment = RibbonType.All)
+                {
+                if (buttonDefinitions == null)
+                    { throw new ArgumentNullException(nameof(buttonDefinitions)); }
+
+                ObjectCollection definitions = CreateButtonDefinitionCollection(buttonDefinitions);
+                CommandControl ctrl = _panel.CommandControls.AddButtonPopup(definitions, useLargeIcon, true);
+
+                return new CommandControlWrapper(ctrl, environment);
+                }
+
+            /// <inheritdoc />
+            public ICommandControl AddButtonPopupToSlideout(IEnumerable<IButtonDefinition> buttonDefinitions, bool useLargeIcon, RibbonType environment = RibbonType.All)
+                {
+                if (buttonDefinitions == null)
+                    { throw new ArgumentNullException(nameof(buttonDefinitions)); }
+
+                ObjectCollection definitions = CreateButtonDefinitionCollection(buttonDefinitions);
+                CommandControl control = _panel.SlideoutControls.AddButtonPopup(definitions, useLargeIcon);
+
+                return new CommandControlWrapper(control, environment);
+                }
+
+            /// <inheritdoc />
+            public ICommandControl AddButtonToSlideout(IButtonDefinition buttonDef, RibbonType environment = RibbonType.All)
+                {
+                if (buttonDef == null)
+                    { throw new ArgumentNullException(nameof(buttonDef)); }
+
+                CommandControl control = _panel.SlideoutControls.AddButton(buttonDef.InventorButtonDefinition, true);
+                return new CommandControlWrapper(control, environment);
+                }
+
+            /// <inheritdoc />
+            public ICommandControl AddComboBox(IComboBoxDefinition comboBoxDef, RibbonType environment = RibbonType.All)
+                {
+                if (comboBoxDef == null)
+                    { throw new ArgumentNullException(nameof(comboBoxDef)); }
+
+                CommandControl control = _panel.CommandControls.AddComboBox(comboBoxDef.InventorComboBoxDefinition);
+                return new CommandControlWrapper(control, environment);
+                }
+
+            /// <inheritdoc />
+            public ICommandControl AddComboBoxToSlideout(IComboBoxDefinition comboBoxDef, RibbonType environment = RibbonType.All)
+                {
+                if (comboBoxDef == null)
+                    { throw new ArgumentNullException(nameof(comboBoxDef)); }
+
+                CommandControl control = _panel.SlideoutControls.AddComboBox(comboBoxDef.InventorComboBoxDefinition);
+                return new CommandControlWrapper(control, environment);
+                }
+
+            /// <inheritdoc />
+            public ICommandControl AddGallery(IEnumerable<IButtonDefinition> buttonDefinitions, bool displayAsComboBox, int width = 200, RibbonType environment = RibbonType.All)
+                {
+                if (buttonDefinitions == null)
+                    { throw new ArgumentNullException(nameof(buttonDefinitions)); }
+
+                ObjectCollection definitions = CreateButtonDefinitionCollection(buttonDefinitions);
+                CommandControl control = _panel.CommandControls.AddGallery(definitions, displayAsComboBox, width);
+
+                return new CommandControlWrapper(control, environment);
+                }
+
+            /// <inheritdoc />
+            public ICommandControl AddGalleryToSlideout(IEnumerable<IButtonDefinition> buttonDefinitions, bool displayAsComboBox, int width = 200, RibbonType environment = RibbonType.All)
+                {
+                if (buttonDefinitions == null)
+                    { throw new ArgumentNullException(nameof(buttonDefinitions)); }
+
+                ObjectCollection definitions = CreateButtonDefinitionCollection(buttonDefinitions);
+                CommandControl control = _panel.SlideoutControls.AddGallery(definitions, displayAsComboBox, width);
+
+                return new CommandControlWrapper(control, environment);
+                }
+
+            /// <inheritdoc />
+            public ICommandControl AddPopup(IButtonDefinition displayedControl, IEnumerable<IButtonDefinition> additionalButtons, bool useLargeIcon, RibbonType environment = RibbonType.All)
+                {
+                if (displayedControl == null)
+                    { throw new ArgumentNullException(nameof(displayedControl)); }
+
+                if (additionalButtons == null)
+                    { throw new ArgumentNullException(nameof(additionalButtons)); }
+
+                ObjectCollection definitions = CreateButtonDefinitionCollection(additionalButtons);
+                CommandControl control = _panel.CommandControls.AddPopup(displayedControl.InventorButtonDefinition, definitions, useLargeIcon, true);
+
+                return new CommandControlWrapper(control, environment);
+                }
+
+            /// <inheritdoc />
+            public ICommandControl AddPopupToSlideout(IButtonDefinition displayedControl, IEnumerable<IButtonDefinition> additionalButtons, bool useLargeIcon, RibbonType environment = RibbonType.All)
+                {
+                if (displayedControl == null)
+                    { throw new ArgumentNullException(nameof(displayedControl)); }
+
+                if (additionalButtons == null)
+                    { throw new ArgumentNullException(nameof(additionalButtons)); }
+
+                ObjectCollection definitions = CreateButtonDefinitionCollection(additionalButtons);
+                CommandControl control = _panel.SlideoutControls.AddPopup(displayedControl.InventorButtonDefinition, definitions, useLargeIcon);
+
+                return new CommandControlWrapper(control, environment);
+                }
+
+            /// <inheritdoc />
+            public ICommandControl AddSplitButton(IButtonDefinition displayedControl, IEnumerable<IButtonDefinition> additionalButtons, bool useLargeIcon, RibbonType environment = RibbonType.All)
+                {
+                if (displayedControl == null)
+                    { throw new ArgumentNullException(nameof(displayedControl)); }
+
+                if (additionalButtons == null)
+                    { throw new ArgumentNullException(nameof(additionalButtons)); }
+
+                ObjectCollection definitions = CreateButtonDefinitionCollection(additionalButtons);
+                CommandControl control = _panel.CommandControls.AddSplitButton(displayedControl.InventorButtonDefinition, definitions, useLargeIcon, true);
+
+                return new CommandControlWrapper(control, environment);
+                }
+
+            /// <inheritdoc />
+            public ICommandControl AddSplitButtonMRU(IEnumerable<IButtonDefinition> buttonDefinitions, bool useLargeIcon, RibbonType environment = RibbonType.All)
+                {
+                if (buttonDefinitions == null)
+                    { throw new ArgumentNullException(nameof(buttonDefinitions)); }
+
+                ObjectCollection definitions = CreateButtonDefinitionCollection(buttonDefinitions);
+                CommandControl control = _panel.CommandControls.AddSplitButtonMRU(definitions, useLargeIcon);
+
+                return new CommandControlWrapper(control, environment);
+                }
+
+            /// <inheritdoc />
+            public ICommandControl AddSplitButtonMRUToSlideout(IEnumerable<IButtonDefinition> buttonDefinitions, bool useLargeIcon, RibbonType environment = RibbonType.All)
+                {
+                if (buttonDefinitions == null)
+                    { throw new ArgumentNullException(nameof(buttonDefinitions)); }
+
+                ObjectCollection definitions = CreateButtonDefinitionCollection(buttonDefinitions);
+                CommandControl control = _panel.SlideoutControls.AddSplitButtonMRU(definitions, useLargeIcon);
+
+                return new CommandControlWrapper(control, environment);
+                }
+
+            /// <inheritdoc />
+            public ICommandControl AddSplitButtonToSlideout(IButtonDefinition displayedControl, IEnumerable<IButtonDefinition> additionalButtons, bool useLargeIcon, RibbonType environment = RibbonType.All)
+                {
+                if (displayedControl == null)
+                    { throw new ArgumentNullException(nameof(displayedControl)); }
+
+                if (additionalButtons == null)
+                    { throw new ArgumentNullException(nameof(additionalButtons)); }
+
+                ObjectCollection definitions = CreateButtonDefinitionCollection(additionalButtons);
+                CommandControl control = _panel.SlideoutControls.AddSplitButton(displayedControl.InventorButtonDefinition, definitions, useLargeIcon);
+
+                return new CommandControlWrapper(control, environment);
+                }
+
+            /// <inheritdoc />
+            public ICommandControl AddTogglePopup(IButtonDefinition displayedControl, IEnumerable<IButtonDefinition> additionalButtons, bool useLargeIcon, RibbonType environment = RibbonType.All)
+                {
+                if (displayedControl == null)
+                    { throw new ArgumentNullException(nameof(displayedControl)); }
+
+                if (additionalButtons == null)
+                    { throw new ArgumentNullException(nameof(additionalButtons)); }
+
+                ObjectCollection definitions = CreateButtonDefinitionCollection(additionalButtons);
+                CommandControl control = _panel.CommandControls.AddTogglePopup(displayedControl.InventorButtonDefinition, definitions, useLargeIcon);
+
+                return new CommandControlWrapper(control, environment);
+                }
+
+            /// <inheritdoc />
+            public ICommandControl AddTogglePopupToSlideout(IButtonDefinition displayedControl, IEnumerable<IButtonDefinition> additionalButtons, bool useLargeIcon, RibbonType environment = RibbonType.All)
+                {
+                if (displayedControl == null)
+                    { throw new ArgumentNullException(nameof(displayedControl)); }
+
+                if (additionalButtons == null)
+                    { throw new ArgumentNullException(nameof(additionalButtons)); }
+
+                ObjectCollection definitions = CreateButtonDefinitionCollection(additionalButtons);
+                CommandControl control = _panel.SlideoutControls.AddTogglePopup(displayedControl.InventorButtonDefinition, definitions, useLargeIcon);
+
+                return new CommandControlWrapper(control, environment);
+                }
+
+            #endregion Methods
+
+            #region Private Methods
+
+            private ObjectCollection CreateButtonDefinitionCollection(IEnumerable<IButtonDefinition> buttonDefinitions)
+                {
+                ObjectCollection definitions = _panel.Parent.Application.TransientObjects.CreateObjectCollection();
+
+                foreach (IButtonDefinition buttonDefinition in buttonDefinitions)
+                    {
+                    if (buttonDefinition == null)
+                        { throw new ArgumentException("The collection contains a null button definition.", nameof(buttonDefinitions)); }
+
+                    definitions.Add(buttonDefinition.InventorButtonDefinition);
+                    }
+                return definitions;
+                }
+
+            #endregion Private Methods
+            }
+
+        /// <inheritdoc />
+        public sealed class RibbonTabWrapper : IRibbonTab
+            {
+            #region Fields
+            private readonly string _clientId;
             private readonly RibbonTab _tab;
 
             #endregion Fields
 
             #region Properties
-            public string Name => _tab.DisplayName;
 
+            /// <inheritdoc />
             public string InternalName => _tab.InternalName;
 
+            /// <inheritdoc />
+            public string Name => _tab.DisplayName;
+
+            /// <inheritdoc />
             public IEnumerable<IRibbonPanel> Panels
                 {
                 get
@@ -212,337 +776,54 @@ namespace InventorRibbonManager
             #endregion Properties
 
             #region Constructor
-            public RibbonTabWrapper(RibbonTab tab)
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="RibbonTabWrapper"/> class.
+            /// </summary>
+            /// <param name="tab">The underlying Inventor ribbon tab.</param>
+            /// <param name="clientId">The add-in client identifier.</param>
+            /// <exception cref="ArgumentNullException">
+            /// Thrown when <paramref name="tab"/> is <see langword="null"/>.
+            /// </exception>
+            /// <exception cref="ArgumentException">
+            /// Thrown when <paramref name="clientId"/> is empty or consists only of white-space characters.
+            /// </exception>
+            public RibbonTabWrapper(RibbonTab tab, string clientId)
                 {
-                _tab = tab;
+                _tab = tab ?? throw new ArgumentNullException(nameof(tab));
+
+                if (string.IsNullOrWhiteSpace(clientId))
+                    { throw new ArgumentException("The client identifier must not be null, empty, or white-space.", nameof(clientId)); }
+
+                _clientId = clientId;
                 }
 
             #endregion Constructor
 
             #region Methods
+
+            /// <inheritdoc />
             public IRibbonPanel AddPanel(string displayName, string internalName)
                 {
+                if (string.IsNullOrWhiteSpace(displayName))
+                    { throw new ArgumentException("The panel display name must not be null or empty.", nameof(displayName)); }
+
+                if (string.IsNullOrWhiteSpace(internalName))
+                    { throw new ArgumentException("The internal panel name must not be null or empty.", nameof(internalName)); }
+
                 foreach (RibbonPanel panel in _tab.RibbonPanels)
                     {
-                    if (panel.InternalName == internalName)
+                    if (string.Equals(panel.InternalName, internalName, StringComparison.Ordinal))
                         { return new RibbonPanelWrapper(panel); }
                     }
 
-                RibbonPanel newPanel = _tab.RibbonPanels.Add(displayName, internalName, InventorRibbonBuilder._guid);
+                RibbonPanel newPanel = _tab.RibbonPanels.Add(displayName, internalName, _clientId);
                 return new RibbonPanelWrapper(newPanel);
                 }
 
             #endregion Methods
             }
 
-        public class RibbonPanelWrapper : IRibbonPanel
-            {
-            #region Fields
-            private readonly RibbonPanel _panel;
-
-            #endregion Fields
-
-            #region Properties
-            public string Name => _panel.DisplayName;
-            public string InternalName => _panel.InternalName;
-
-            #endregion Properties
-
-            #region Constructor
-            public RibbonPanelWrapper(RibbonPanel panel)
-                {
-                _panel = panel;
-                }
-
-            #endregion Constructor
-
-            #region Methods
-            public ICommandControl AddButton(IButtonDefinition buttonDef, bool useLargeIcon, RibbonType environment = RibbonType.All)
-                {
-                try
-                    {
-                    if (_panel.CommandControls[buttonDef.InternalName] is CommandControl existing)
-                        {
-                        return new CommandControlWrapper(existing, environment);
-                        }
-                    }
-                catch (System.Runtime.InteropServices.COMException)
-                    {
-                    }
-                catch (ArgumentException Argex)
-                    {
-                    }
-                catch (Exception ex)
-                    {
-                    }
-
-                try
-                    {
-                    CommandControl newCtrl = _panel.CommandControls.AddButton(buttonDef.InventorButtonDefinition, useLargeIcon);
-                    return new CommandControlWrapper(newCtrl, environment);
-                    }
-                catch (Exception ex)
-                    {
-                    return null;
-                    }
-
-                }
-
-            public ICommandControl AddButtonToSlideout(IButtonDefinition buttonDef, RibbonType environment = RibbonType.All)
-                {
-                CommandControl ctrl = _panel.SlideoutControls.AddButton(buttonDef.InventorButtonDefinition, true);
-                return new CommandControlWrapper(ctrl, environment);
-                }
-
-            public ICommandControl AddButtonPopup(IEnumerable<IButtonDefinition> ButtonDefinitions, bool useLargeIcon, RibbonType environment = RibbonType.All)
-                {
-                ObjectCollection defs = _panel.Parent.Application.TransientObjects.CreateObjectCollection();
-                foreach (IButtonDefinition def in ButtonDefinitions)
-                    {
-                    defs.Add(def.InventorButtonDefinition);
-                    }
-                CommandControl ctrl = _panel.CommandControls.AddButtonPopup(defs, useLargeIcon, true);
-                return new CommandControlWrapper(ctrl, environment);
-                }
-
-            public ICommandControl AddButtonPopupToSlideout(IEnumerable<IButtonDefinition> ButtonDefinitions, bool useLargeIcon, RibbonType environment = RibbonType.All)
-                {
-                ObjectCollection defs = _panel.Parent.Application.TransientObjects.CreateObjectCollection();
-                foreach (IButtonDefinition def in ButtonDefinitions)
-                    {
-                    defs.Add(def.InventorButtonDefinition);
-                    }
-                CommandControl ctrl = _panel.SlideoutControls.AddButtonPopup(defs, useLargeIcon);
-                return new CommandControlWrapper(ctrl, environment);
-                }
-
-            public ICommandControl AddComboBox(IComboBoxDefinition comboBoxDef, RibbonType environment = RibbonType.All)
-                {
-                CommandControl ctrl = _panel.CommandControls.AddComboBox(comboBoxDef.InventorComboBoxDefinition);
-                return new CommandControlWrapper(ctrl, environment);
-                }
-
-            public ICommandControl AddComboBoxToSlideout(IComboBoxDefinition comboBoxDef, RibbonType environment = RibbonType.All)
-                {
-                CommandControl ctrl = _panel.SlideoutControls.AddComboBox(comboBoxDef.InventorComboBoxDefinition);
-                return new CommandControlWrapper(ctrl, environment);
-                }
-
-            public ICommandControl AddGallery(IEnumerable<IButtonDefinition> buttonDefinitions, bool displayAsComboBox, int Width = 200, RibbonType environment = RibbonType.All)
-                {
-                ObjectCollection defs = _panel.Parent.Application.TransientObjects.CreateObjectCollection();
-                foreach (IButtonDefinition def in buttonDefinitions)
-                    {
-                    defs.Add(def.InventorButtonDefinition);
-                    }
-                CommandControl ctrl = _panel.CommandControls.AddGallery(defs, displayAsComboBox, Width);
-                return new CommandControlWrapper(ctrl, environment);
-                }
-
-            public ICommandControl AddGalleryToSlideout(IEnumerable<IButtonDefinition> ButtonDefinitions, bool displayAsComboBox, int Width = 200, RibbonType environment = RibbonType.All)
-                {
-                ObjectCollection defs = _panel.Parent.Application.TransientObjects.CreateObjectCollection();
-                foreach (IButtonDefinition def in ButtonDefinitions)
-                    {
-                    defs.Add(def.InventorButtonDefinition);
-                    }
-                CommandControl ctrl = _panel.SlideoutControls.AddGallery(defs, displayAsComboBox, Width);
-                return new CommandControlWrapper(ctrl, environment);
-                }
-
-            public ICommandControl AddPopup(IButtonDefinition displayedControl, IEnumerable<IButtonDefinition> additionalButtons, bool useLargeIcon, RibbonType environment = RibbonType.All)
-                {
-                ObjectCollection defs = _panel.Parent.Application.TransientObjects.CreateObjectCollection();
-                if (additionalButtons == null)
-                    { return null; }
-                foreach (IButtonDefinition def in additionalButtons)
-                    {
-                    defs.Add(def.InventorButtonDefinition);
-                    }
-                CommandControl ctrl = _panel.CommandControls.AddPopup(displayedControl.InventorButtonDefinition, defs, useLargeIcon, true);
-                return new CommandControlWrapper(ctrl, environment);
-                }
-
-            public ICommandControl AddPopupToSlideout(IButtonDefinition displayedControl, IEnumerable<IButtonDefinition> additionalButtons, bool useLargeIcon, RibbonType environment = RibbonType.All)
-                {
-                ObjectCollection defs = _panel.Parent.Application.TransientObjects.CreateObjectCollection();
-                foreach (IButtonDefinition def in additionalButtons)
-                    {
-                    defs.Add(def.InventorButtonDefinition);
-                    }
-                CommandControl ctrl = _panel.SlideoutControls.AddPopup(displayedControl.InventorButtonDefinition, defs, useLargeIcon);
-                return new CommandControlWrapper(ctrl, environment);
-                }
-
-            public ICommandControl AddSplitButton(IButtonDefinition displayedControl, IEnumerable<IButtonDefinition> additionalButtons, bool useLargeIcon, RibbonType environment = RibbonType.All)
-                {
-                ObjectCollection defs = _panel.Parent.Application.TransientObjects.CreateObjectCollection();
-                foreach (IButtonDefinition def in additionalButtons)
-                    {
-                    defs.Add(def.InventorButtonDefinition);
-                    }
-                CommandControl ctrl = _panel.CommandControls.AddSplitButton(displayedControl.InventorButtonDefinition, defs, useLargeIcon, true);
-                return new CommandControlWrapper(ctrl, environment);
-                }
-
-            public ICommandControl AddSplitButtonToSlideout(IButtonDefinition displayedControl, IEnumerable<IButtonDefinition> additionalButtons, bool useLargeIcon, RibbonType environment = RibbonType.All)
-                {
-                ObjectCollection defs = _panel.Parent.Application.TransientObjects.CreateObjectCollection();
-                foreach (IButtonDefinition def in additionalButtons)
-                    {
-                    defs.Add(def.InventorButtonDefinition);
-                    }
-                CommandControl ctrl = _panel.SlideoutControls.AddSplitButton(displayedControl.InventorButtonDefinition, defs, useLargeIcon);
-                return new CommandControlWrapper(ctrl, environment);
-                }
-
-            public ICommandControl AddSplitButtonMRU(IEnumerable<IButtonDefinition> buttonDefinitions, bool useLargeIcon, RibbonType environment = RibbonType.All)
-                {
-                ObjectCollection defs = _panel.Parent.Application.TransientObjects.CreateObjectCollection();
-                foreach (IButtonDefinition def in buttonDefinitions)
-                    {
-                    defs.Add(def.InventorButtonDefinition);
-                    }
-                CommandControl ctrl = _panel.CommandControls.AddSplitButtonMRU(defs, useLargeIcon);
-                return new CommandControlWrapper(ctrl, environment);
-                }
-
-            public ICommandControl AddSplitButtonMRUToSlideout(IEnumerable<IButtonDefinition> ButtonDefinitions, bool useLargeIcon, RibbonType environment = RibbonType.All)
-                {
-                ObjectCollection defs = _panel.Parent.Application.TransientObjects.CreateObjectCollection();
-                foreach (IButtonDefinition def in ButtonDefinitions)
-                    {
-                    defs.Add(def.InventorButtonDefinition);
-                    }
-                CommandControl ctrl = _panel.SlideoutControls.AddSplitButtonMRU(defs, useLargeIcon);
-                return new CommandControlWrapper(ctrl, environment);
-                }
-
-            public ICommandControl AddTogglePopup(IButtonDefinition displayedControl, IEnumerable<IButtonDefinition> additionalButtons, bool useLargeIcon, RibbonType environment = RibbonType.All)
-                {
-                ObjectCollection defs = _panel.Parent.Application.TransientObjects.CreateObjectCollection();
-                foreach (IButtonDefinition def in additionalButtons)
-                    {
-                    defs.Add(def.InventorButtonDefinition);
-                    }
-                CommandControl ctrl = _panel.CommandControls.AddTogglePopup(displayedControl.InventorButtonDefinition, defs, useLargeIcon);
-                return new CommandControlWrapper(ctrl, environment);
-                }
-
-            public ICommandControl AddTogglePopupToSlideout(IButtonDefinition displayedControl, IEnumerable<IButtonDefinition> additionalButtons, bool useLargeIcon, RibbonType environment = RibbonType.All)
-                {
-                ObjectCollection defs = _panel.Parent.Application.TransientObjects.CreateObjectCollection();
-                foreach (IButtonDefinition def in additionalButtons)
-                    {
-                    defs.Add(def.InventorButtonDefinition);
-                    }
-                CommandControl ctrl = _panel.SlideoutControls.AddTogglePopup(displayedControl.InventorButtonDefinition, defs, useLargeIcon);
-                return new CommandControlWrapper(ctrl, environment);
-                }
-
-            #endregion Methods
-            }
-
-        public class CommandControlWrapper : ICommandControl
-            {
-            #region Fields
-            private readonly CommandControl _control;
-
-            #endregion Fields
-
-            #region Properties
-            public RibbonType Environment { get; }
-            public string InternalName => _control.InternalName;
-            public object InventorControl => _control;
-            #endregion Properties
-
-            #region Constructor
-            public CommandControlWrapper(CommandControl control, RibbonType environment)
-                {
-                _control = control;
-                Environment = environment;
-                }
-
-            #endregion Constructor
-            }
-
-        public class CustomButtonDefinition : IButtonDefinition, IDisposable
-            {
-            #region Fields
-            private readonly Action _executeAction;
-
-            #endregion Fields
-
-            #region Properties
-            public string DisplayName => InventorButtonDefinition.DisplayName;
-            public string InternalName => InventorButtonDefinition.InternalName;
-            public object StandardIcon { get; }
-            public object LargeIcon { get; }
-            public ButtonDefinition InventorButtonDefinition { get; }
-            public RibbonType Environment { get; }
-            public bool Pressed { get; set; }
-
-            #endregion Properties
-
-            #region Constructor
-            public CustomButtonDefinition(ButtonDefinition definition, RibbonType environment = RibbonType.All)
-                {
-                InventorButtonDefinition = definition;
-                Environment = environment;
-                InventorButtonDefinition.OnExecute += OnExecute;
-                }
-
-            public CustomButtonDefinition(ButtonDefinition definition, Action onExecute, RibbonType environment = RibbonType.All)
-                {
-                InventorButtonDefinition = definition;
-                _executeAction = onExecute;
-                Environment = environment;
-                InventorButtonDefinition.OnExecute += OnExecute;
-                }
-
-            #endregion Constructor
-
-            #region Dispose
-            public void Dispose()
-                {
-                if (InventorButtonDefinition != null)
-                    { InventorButtonDefinition.OnExecute -= OnExecute; }
-                }
-
-            #endregion Dispose
-
-            #region Methods
-            public void Execute()
-                {
-                _executeAction?.Invoke();
-                }
-
-            #endregion Methods
-
-            #region private Methods
-            private void OnExecute(NameValueMap Context)
-                {
-                _executeAction?.Invoke();
-                }
-
-            #endregion private Methods
-            }
-
-        public class ComboBoxDefinitionWrapper : IComboBoxDefinition
-            {
-            #region Properties
-            public string InternalName => InventorComboBoxDefinition.InternalName;
-            public ComboBoxDefinition InventorComboBoxDefinition { get; }
-
-            #endregion Properties
-
-            #region Constructor
-            public ComboBoxDefinitionWrapper(ComboBoxDefinition comboBoxDefinition)
-                {
-                InventorComboBoxDefinition = comboBoxDefinition;
-                }
-
-            #endregion Constructor
-            }
+        #endregion Classes
         }
     }
