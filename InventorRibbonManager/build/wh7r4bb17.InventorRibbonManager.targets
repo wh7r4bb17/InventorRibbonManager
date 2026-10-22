@@ -1,0 +1,23 @@
+<Project>
+	<PropertyGroup>
+		<InventorInstallDir Condition="'$(InventorInstallDir)' == ''">C:\Program Files\Autodesk\Inventor $(AdskVersion)</InventorInstallDir>
+	</PropertyGroup>
+
+	<ItemGroup Condition="'$(AdskVersion)' != ''">
+		<Reference Include="Autodesk.Inventor.Interop">
+			<HintPath>$(InventorInstallDir)\Bin\Autodesk.Inventor.Interop.dll</HintPath>
+			<EmbedInteropTypes>false</EmbedInteropTypes>
+			<Private>false</Private>
+		</Reference>
+	</ItemGroup>
+
+	<Target Name="InventorRibbonManager_ValidateConfiguration" BeforeTargets="ResolveAssemblyReferences">
+		<Error
+		  Condition="'$(AdskVersion)' == ''"
+		  Text="Please set AdskVersion in the add-in project, for example: &lt;AdskVersion&gt;2025&lt;/AdskVersion&gt;." />
+
+		<Error
+		  Condition="'$(AdskVersion)' != '' And !Exists('$(InventorInstallDir)\Bin\Autodesk.Inventor.Interop.dll')"
+		  Text="Inventor Interop library not found: $(InventorInstallDir)\Bin\Autodesk.Inventor.Interop.dll. Check AdskVersion or InventorInstallDir." />
+	</Target>
+</Project>

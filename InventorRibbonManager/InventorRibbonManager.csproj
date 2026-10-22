@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<AdskVersion>2025</AdskVersion>
+		<AdskVersion Condition="'$(AdskVersion)' == ''">2025</AdskVersion>
 	</PropertyGroup>
 
 	<PropertyGroup>
@@ -10,16 +10,10 @@
 	</PropertyGroup>
 
 	<PropertyGroup>
-		<TargetFrameworks>net4.8; net8.0-windows</TargetFrameworks>
+		<TargetFrameworks>net48;net8.0-windows; net10.0-windows</TargetFrameworks>
+		<LangVersion>8.0</LangVersion>
+		<Nullable>enable</Nullable>
 	</PropertyGroup>
-
-	<!--<PropertyGroup Condition="'$(AdskVersion)' &lt;= '2025'">
-		<TargetFramework>net8.0-windows</TargetFramework>
-	</PropertyGroup>
-
-	<PropertyGroup Condition="'$(AdskVersion)' &lt;= '2024'">
-		<TargetFramework>net4.8</TargetFramework>
-	</PropertyGroup>-->
 
 	<PropertyGroup>
 		<ApplicationIcon>Resources\EvilRabbit.ico</ApplicationIcon>
@@ -42,7 +36,7 @@
 		<PackageId>wh7r4bb17.InventorRibbonManager</PackageId>
 		<Description>Helper library to create Ribbontabs, -panels and -buttons for Inventor Addins.</Description>
 		<Product>InventorRibbonManager.dll</Product>
-		<Version>1.0.1</Version>
+		<Version>1.0.2</Version>
 		<AssemblyVersion>$(Version)</AssemblyVersion>
 		<FileVersion>$(Version)</FileVersion>
 		<UseWindowsForms>true</UseWindowsForms>
@@ -102,6 +96,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<None Remove="build\wh7r4bb17.InventorRibbonManager.targets" />
+		<None Include="build\wh7r4bb17.InventorRibbonManager.targets" Pack="true" PackagePath="build\" />
 		<None Include="docs\README.md" Pack="True" PackagePath="\" />
 		<None Include=".editorconfig" />
 		<None Include="Resources\EvilRabbit.png" Pack="True" PackagePath="\" Link="Resources\EvilRabbit.png" />
