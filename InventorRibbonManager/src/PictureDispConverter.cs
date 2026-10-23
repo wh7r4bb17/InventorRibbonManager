@@ -7,14 +7,31 @@ namespace InventorRibbonManager
     internal sealed class PictureDispConverter
         {
         #region Fields
-        [DllImport("OleAut32.dll", EntryPoint = "OleCreatePictureIndirect", ExactSpelling = true, PreserveSig = false)]
+        private static Guid _iPictureDispGuid = typeof(stdole.IPictureDisp).GUID;
 
+        [DllImport("OleAut32.dll", EntryPoint = "OleCreatePictureIndirect", ExactSpelling = true, PreserveSig = false)]
         private static extern stdole.IPictureDisp OleCreatePictureIndirect([MarshalAs(UnmanagedType.AsAny)] object picdesc, ref Guid iid, [MarshalAs(UnmanagedType.Bool)] bool fOwn);
-        static Guid _iPictureDispGuid = typeof(stdole.IPictureDisp).GUID;
 
         #endregion Fields
 
-        #region Methods
+        #region Internal Methods
+
+        internal static stdole.IPictureDisp? GetFromPath(string path)
+            {
+            if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
+                { return null; }
+
+            try
+                {
+                using var bitmap = new Bitmap(path);
+                return ToIPictureDisp(bitmap);
+                }
+            catch
+                {
+                return null;
+                }
+            }
+
         internal static stdole.IPictureDisp ToIPictureDisp(System.Drawing.Icon icon)
             {
             return _ToIPictureDisp(icon);
@@ -25,25 +42,10 @@ namespace InventorRibbonManager
             return _ToIPictureDisp(bmp);
             }
 
-        internal static stdole.IPictureDisp? GetFromPath(string path)
-            {
-            if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
-                { return null; }
-
-            try
-                {
-                var bmp = new Bitmap(path);
-                return ToIPictureDisp(bmp);
-                }
-            catch
-                {
-                return null;
-                }
-            }
-
-        #endregion Methods
+        #endregion Internal Methods
 
         #region private Methods
+
         private static stdole.IPictureDisp _ToIPictureDisp(System.Drawing.Icon icon)
             {
             PICTDESC.Icon pictIcon = new PICTDESC.Icon(icon);
@@ -58,15 +60,32 @@ namespace InventorRibbonManager
 
         #endregion private Methods
 
+        #region Classes
+
         private static class PICTDESC
             {
-            //Picture Types
-            public const short PICTYPE_UNINITIALIZED = -1;
-            public const short PICTYPE_NONE = 0;
-            public const short PICTYPE_BITMAP = 1;
-            public const short PICTYPE_METAFILE = 2;
-            public const short PICTYPE_ICON = 3;
-            public const short PICTYPE_ENHMETAFILE = 4;
+            #region Fields
+            internal const short PICTYPE_BITMAP = 1;
+            internal const short PICTYPE_ICON = 3;
+
+            #endregion Fields
+
+            #region Classes
+
+            [StructLayout(LayoutKind.Sequential)]
+            public class Bitmap
+                {
+                internal int cbSizeOfStruct = Marshal.SizeOf(typeof(PICTDESC.Bitmap));
+                internal int picType = PICTDESC.PICTYPE_BITMAP;
+                internal IntPtr hbitmap = IntPtr.Zero;
+                internal IntPtr hpal = IntPtr.Zero;
+                internal int unused;
+
+                internal Bitmap(System.Drawing.Bitmap bitmap)
+                    {
+                    this.hbitmap = bitmap.GetHbitmap();
+                    }
+                }
 
             [StructLayout(LayoutKind.Sequential)]
             public class Icon
@@ -83,20 +102,9 @@ namespace InventorRibbonManager
                     }
                 }
 
-            [StructLayout(LayoutKind.Sequential)]
-            public class Bitmap
-                {
-                internal int cbSizeOfStruct = Marshal.SizeOf(typeof(PICTDESC.Bitmap));
-                internal int picType = PICTDESC.PICTYPE_BITMAP;
-                internal IntPtr hbitmap = IntPtr.Zero;
-                internal IntPtr hpal = IntPtr.Zero;
-                internal int unused;
-
-                internal Bitmap(System.Drawing.Bitmap bitmap)
-                    {
-                    this.hbitmap = bitmap.GetHbitmap();
-                    }
-                }
+            #endregion Classes
             }
+
+        #endregion Classes
         }
     }
