@@ -9,35 +9,37 @@ namespace SampleAddin
     public class ButtonPopup : IPanelButton
         {
         #region Fields
-        private static string Icon16x16 => IconHelper.Icon1_16x16;
-        private static string Icon32x32 => IconHelper.Icon1_32x32;
-        private static string Icon16x16_2 => IconHelper.Icon2_16x16;
-        private static string Icon32x32_2 => IconHelper.Icon2_32x32;
-        private readonly IPictureDisp _icon16;
-        private readonly IPictureDisp _icon32;
         private readonly List<IButtonDefinition> _buttons;
+        private readonly object _icon16;
+        private readonly object _icon32;
+        private static string Icon16x16 => IconHelper.Icon1_16x16;
+        private static string Icon16x16_2 => IconHelper.Icon2_16x16;
+        private static string Icon32x32 => IconHelper.Icon1_32x32;
+        private static string Icon32x32_2 => IconHelper.Icon2_32x32;
+
         #endregion Fields
 
         #region Properties
         public string DisplayName => "ButtonPopup";
-        public string InternalName => "ButtonPopup.Internal";
-        public object StandardIcon => _icon16;
-        public object LargeIcon => _icon32;
-        public ButtonDefinition InventorButtonDefinition { get; }
         public RibbonType Environment => RibbonType.All;
-        public string PanelName => "ButtonPopup";
-        public string PanelInternalName => "ButtonPopup_Internal";
+        public string InternalName => "ButtonPopup.Internal";
+        public ButtonDefinition InventorButtonDefinition { get; }
         public bool IsToggle => false;
+        public object LargeIcon => _icon32;
+        public string PanelInternalName => "ButtonPopup_Internal";
+        public string PanelName => "ButtonPopup";
         public bool Pressed { get; set; }
+        public object StandardIcon => _icon16;
 
         #endregion Properties
 
         #region Constructor
+
         public ButtonPopup(Application app)
             {
-            _icon16 = (IPictureDisp)PictureDispConverter.GetFromPath(Icon16x16);
-            _icon32 = (IPictureDisp)PictureDispConverter.GetFromPath(Icon32x32);
-            _buttons = new List<IButtonDefinition>();
+            _icon16 = InventorIconConverter.FromFile(Icon16x16);
+            _icon32 = InventorIconConverter.FromFile(Icon32x32);
+            _buttons = [];
 
             InventorButtonDefinition = app.CommandManager.ControlDefinitions.AddButtonDefinition(
                 DisplayName: DisplayName,
@@ -53,8 +55,8 @@ namespace SampleAddin
             InventorButtonDefinition.OnExecute += (ctx) => Execute();
             _buttons.Add(this);
 
-            _icon16 = (IPictureDisp)PictureDispConverter.GetFromPath(Icon16x16_2);
-            _icon32 = (IPictureDisp)PictureDispConverter.GetFromPath(Icon32x32_2);
+            _icon16 = InventorIconConverter.FromFile(Icon16x16_2);
+            _icon32 = InventorIconConverter.FromFile(Icon32x32_2);
 
             ButtonDefinition secondBtn = app.CommandManager.ControlDefinitions.AddButtonDefinition(
                 DisplayName: "ButtonPopup_1",
@@ -71,13 +73,10 @@ namespace SampleAddin
 
             _buttons.Add(new CustomButtonDefinition(secondBtn));
             }
+
         #endregion Constructor
 
         #region Methods
-        public void Execute()
-            {
-            System.Windows.Forms.MessageBox.Show("First Button in Popup clicked!");
-            }
 
         public static void Execute2()
             {
@@ -88,6 +87,12 @@ namespace SampleAddin
             {
             panel.AddButtonPopup(_buttons, true, env);
             }
+
+        public void Execute()
+            {
+            System.Windows.Forms.MessageBox.Show("First Button in Popup clicked!");
+            }
+
         #endregion Methods
         }
 
@@ -100,18 +105,19 @@ namespace SampleAddin
 
         #region Properties
         public string DisplayName => "SlideoutButtonPopup";
-        public string InternalName => "SlideoutButtonPopup.Internal";
-        public object StandardIcon => null;
-        public object LargeIcon => null;
         public RibbonType Environment => RibbonType.All;
-        public string PanelName => "ButtonPopup";
-        public string PanelInternalName => "ButtonPopup_Internal";
-        public bool Pressed { get; set; }
+        public string InternalName => "SlideoutButtonPopup.Internal";
         public ButtonDefinition InventorButtonDefinition => null;
+        public object LargeIcon => null;
+        public string PanelInternalName => "ButtonPopup_Internal";
+        public string PanelName => "ButtonPopup";
+        public bool Pressed { get; set; }
+        public object StandardIcon => null;
 
         #endregion Properties
 
         #region Constructor
+
         public SlideoutButtonPopup(Application app)
             {
             _buttons = Enumerable.Range(1, 3)
@@ -119,8 +125,8 @@ namespace SampleAddin
                             {
                                 string Icon16x16 = IconHelper.GetIconPath(i, 16);
                                 string Icon32x32 = IconHelper.GetIconPath(i, 32);
-                                object _icon16 = (IPictureDisp)PictureDispConverter.GetFromPath(Icon16x16);
-                                object _icon32 = (IPictureDisp)PictureDispConverter.GetFromPath(Icon32x32);
+                                object _icon16 = InventorIconConverter.FromFile(Icon16x16);
+                                object _icon32 = InventorIconConverter.FromFile(Icon32x32);
                                 var btn = app.CommandManager.ControlDefinitions.AddButtonDefinition(
                                         DisplayName: $"SlideoutBtn {i}",
                                         InternalName: $"SlideoutBtn{i}.Internal",
@@ -145,12 +151,14 @@ namespace SampleAddin
         #endregion Constructor
 
         #region Methods
-        public void Execute() { }
 
         public void AddToPanel(IRibbonPanel panel, RibbonType env)
             {
             panel.AddButtonPopupToSlideout(_buttons, true, env);
             }
+
+        public void Execute()
+            { }
 
         #endregion Methods
         }

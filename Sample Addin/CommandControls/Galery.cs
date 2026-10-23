@@ -15,26 +15,26 @@ namespace SampleAddin
 
         #region Properties
         public string DisplayName => "Gallery";
-        public string InternalName => "Gallery.Internal";
-        public object StandardIcon => null;
-        public object LargeIcon => null;
         public RibbonType Environment => RibbonType.All;
-        public string PanelName => "Gallery";
-        public string PanelInternalName => "Gallery_Internal";
-        public bool Pressed { get; set; }
-
+        public string InternalName => "Gallery.Internal";
         public ButtonDefinition InventorButtonDefinition => null;
+        public object LargeIcon => null;
+        public string PanelInternalName => "Gallery_Internal";
+        public string PanelName => "Gallery";
+        public bool Pressed { get; set; }
+        public object StandardIcon => null;
 
         #endregion Properties
 
         #region Constructor
+
         public Gallery(Application app)
             {
-            _galleryButtons = Enumerable.Range(1, 5)
+            _galleryButtons = [.. Enumerable.Range(1, 5)
                 .Select(i =>
             {
                 string Icon32x32 = IconHelper.GetIconPath(i, 32);
-                object _icon32 = (IPictureDisp)PictureDispConverter.GetFromPath(Icon32x32);
+                object _icon32 = InventorIconConverter.FromFile(Icon32x32);
                 var btn = app.CommandManager.ControlDefinitions.AddButtonDefinition(
                     DisplayName: $"Gallery Item {i}",
                     InternalName: $"GalleryItem{i}.Internal",
@@ -50,20 +50,20 @@ namespace SampleAddin
 
                 return new CustomButtonDefinition(btn);
             })
-                .Cast<IButtonDefinition>()
-                .ToList();
+                .Cast<IButtonDefinition>()];
             }
 
         #endregion Constructor
 
         #region Methods
-        public void Execute()
-            { }
 
         public void AddToPanel(IRibbonPanel panel, RibbonType env)
             {
             panel.AddGallery(_galleryButtons, false, 300, env);
             }
+
+        public void Execute()
+            { }
 
         #endregion Methods
         }
@@ -77,26 +77,26 @@ namespace SampleAddin
 
         #region Properties
         public string DisplayName => "SlideoutGallery";
-        public string InternalName => "SlideoutGallery.Internal";
-        public object StandardIcon => null;
-        public object LargeIcon => null;
         public RibbonType Environment => RibbonType.All;
-        public string PanelName => "Gallery";
-        public string PanelInternalName => "Gallery_Internal";
-        public bool Pressed { get; set; }
-
+        public string InternalName => "SlideoutGallery.Internal";
         public ButtonDefinition InventorButtonDefinition => null;
+        public object LargeIcon => null;
+        public string PanelInternalName => "Gallery_Internal";
+        public string PanelName => "Gallery";
+        public bool Pressed { get; set; }
+        public object StandardIcon => null;
 
         #endregion Properties
 
         #region Constructor
+
         public SlideoutGallery(Application app)
             {
-            _galleryButtons = Enumerable.Range(1, 3)
+            _galleryButtons = [.. Enumerable.Range(1, 3)
                 .Select(i =>
             {
                 string Icon32x32 = IconHelper.GetIconPath(i, 32);
-                object _icon32 = (IPictureDisp)PictureDispConverter.GetFromPath(Icon32x32);
+                object _icon32 = InventorIconConverter.FromFile(Icon32x32);
                 var btn = app.CommandManager.ControlDefinitions.AddButtonDefinition(
                     DisplayName: $"Gallery {i}",
                     InternalName: $"Gallery{i}.Internal",
@@ -112,19 +112,20 @@ namespace SampleAddin
 
                 return new CustomButtonDefinition(btn);
             })
-                .Cast<IButtonDefinition>()
-                .ToList();
+                .Cast<IButtonDefinition>()];
             }
 
         #endregion Constructor
 
         #region Methods
-        public void Execute() { }
 
         public void AddToPanel(IRibbonPanel panel, RibbonType env)
             {
             panel.AddGalleryToSlideout(_galleryButtons, true, 300, env);
             }
+
+        public void Execute()
+            { }
 
         #endregion Methods
         }

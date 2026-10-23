@@ -9,8 +9,8 @@ namespace SampleAddin
         #region Fields
         private static string Icon16x16 => IconHelper.Icon1_16x16;
         private static string Icon32x32 => IconHelper.Icon1_32x32;
-        private readonly IPictureDisp _icon16;
-        private readonly IPictureDisp _icon32;
+        private readonly object _icon16;
+        private readonly object _icon32;
 
         #endregion Fields
 
@@ -23,7 +23,7 @@ namespace SampleAddin
         public RibbonType Environment => RibbonType.All;
         public string PanelName => "Button";
         public string PanelInternalName => "Button_Internal";
-        public bool IsToggle => false;
+        public static bool IsToggle => false;
         public bool Pressed { get; set; }
 
         #endregion Properties
@@ -31,8 +31,8 @@ namespace SampleAddin
         #region Constructor
         public Button(Application app)
             {
-            _icon16 = (IPictureDisp)PictureDispConverter.GetFromPath(Icon16x16);
-            _icon32 = (IPictureDisp)PictureDispConverter.GetFromPath(Icon32x32);
+            _icon16 = InventorIconConverter.FromFile(Icon16x16);
+            _icon32 = InventorIconConverter.FromFile(Icon32x32);  
 
             InventorButtonDefinition = app.CommandManager.ControlDefinitions.AddButtonDefinition(
                 DisplayName: DisplayName,
@@ -74,8 +74,8 @@ namespace SampleAddin
         #region Fields
         private static string Icon16x16 => IconHelper.Icon1_16x16;
         private static string Icon32x32 => IconHelper.Icon1_32x32;
-        private readonly IPictureDisp _icon16;
-        private readonly IPictureDisp _icon32;
+        private readonly object _icon16;
+        private readonly object _icon32;
 
         #endregion Fields
 
@@ -94,8 +94,8 @@ namespace SampleAddin
         #region Constructor
         public SlideoutButton(Application app)
             {
-            _icon16 = (IPictureDisp)PictureDispConverter.GetFromPath(Icon16x16);
-            _icon32 = (IPictureDisp)PictureDispConverter.GetFromPath(Icon32x32);
+            _icon16 = InventorIconConverter.FromFile(Icon16x16);
+            _icon32 = InventorIconConverter.FromFile(Icon32x32); 
 
             InventorButtonDefinition = app.CommandManager.ControlDefinitions.AddButtonDefinition(
                 DisplayName: DisplayName,
