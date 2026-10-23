@@ -16,11 +16,13 @@ The package currently provides builds for:
 - `net8.0-windows`
 - `net10.0-windows`
 
-For Inventor 2025 (2025.5 and newer) and later, the recommended target framework is
-`net10.0-windows`. 
-For Inventor 2025 before 2025.5 , the recommended target framework is
-`net8.0-windows`. 
-For older add-ins, `net48` is supported.
+For Inventor 2025.5 and later, the recommended target framework is
+`net10.0-windows`.
+
+For Inventor 2025 through 2025.4.2, the recommended target framework is
+`net8.0-windows`.
+
+For older Inventor add-ins, `net48` is supported.
 
 The Inventor version is configured in the consuming add-in project through the
 MSBuild property `AdskVersion`.
@@ -29,7 +31,7 @@ For example:
 
 ```xml
 <PropertyGroup>
-  <TargetFramework>net8.0-windows</TargetFramework>
+  <TargetFramework>net10.0-windows</TargetFramework>
   <AdskVersion>2025</AdskVersion>
 </PropertyGroup>
 ```
@@ -58,8 +60,97 @@ MSBuild targets to resolve the Inventor interop reference during the build.
 
 ## 🔧 Prerequisites
 
-- Reference to `InventorRibbonManager.dll` (or included as a project)
-- Your AddIn implements `ApplicationAddInServer`
+- A reference to the `wh7r4bb17.InventorRibbonManager` NuGet package
+- Autodesk Inventor installed on the development machine.
+- Your add-in implements `ApplicationAddInServer`
+- `AdskVersion` set in the consuming add-in project.
+
+---
+
+## 🎨 Button Icons
+
+The package provides the public `InventorIconConverter` class for converting
+.NET `Icon` and `Bitmap` instances or image files into icon objects that can be
+used by Autodesk Inventor ribbon buttons.
+
+The internal OLE and COM conversion details are hidden inside the library.
+
+### Convert a single icon
+
+```csharp
+public object? StandardIcon =>
+    InventorIconConverter.FromFile(@"C:\Icons\hello16.png");
+
+public object? LargeIcon =>
+    InventorIconConverter.FromFile(@"C:\Icons\hello32.png");
+```
+
+The converter returns `null` if the path is `null`, empty, whitespace, invalid,
+or if the image cannot be loaded.
+
+### Convert two image files
+
+Use `FromFiles(...)` when both the standard and large icons are loaded from files:
+
+```csharp
+private static readonly InventorButtonIcons Icons =
+    InventorIconConverter.FromFiles(
+        @"C:\Icons\hello16.png",
+        @"C:\Icons\hello32.png");
+
+public object? StandardIcon => Icons.StandardIcon;
+public object? LargeIcon => Icons.LargeIcon;
+```
+
+The returned `InventorButtonIcons` value contains both converted icon objects.
+
+### Convert bitmap instances
+
+```csharp
+using System.Drawing;
+
+using var standardBitmap = new Bitmap(@"C:\Icons\hello16.png");
+using var largeBitmap = new Bitmap(@"C:\Icons\hello32.png");
+
+InventorButtonIcons icons =
+    InventorIconConverter.FromBitmaps(
+        standardBitmap,
+        largeBitmap);
+
+public object? StandardIcon => icons.StandardIcon;
+public object? LargeIcon => icons.LargeIcon;
+```
+
+### Convert `Icon` instances
+
+```csharp
+using System.Drawing;
+
+using var standardIcon = new Icon(@"C:\Icons\hello16.ico");
+using var largeIcon = new Icon(@"C:\Icons\hello32.ico");
+
+InventorButtonIcons icons =
+    InventorIconConverter.FromIcons(
+        standardIcon,
+        largeIcon);
+
+public object? StandardIcon => icons.StandardIcon;
+public object? LargeIcon => icons.LargeIcon;
+```
+
+### Available conversion methods
+
+| Method | Description |
+|---|---|
+| `FromFile` | Converts one image file into an Inventor-compatible icon object. |
+| `FromFiles` | Converts standard and large image files and returns both icons. |
+| `FromBitmap` | Converts one `Bitmap` into an Inventor-compatible icon object. |
+| `FromBitmaps` | Converts standard and large `Bitmap` instances and returns both icons. |
+| `FromIcon` | Converts one .NET `Icon` into an Inventor-compatible icon object. |
+| `FromIcons` | Converts standard and large `Icon` instances and returns both icons. |
+
+
+
 
 ---
 
@@ -77,9 +168,9 @@ var ribbonBuilder = new InventorRibbonBuilder(inventorApp, myAddInGuid);
 
 ### 2. Create your own commands
 
-Create a class that implements `IPanelButton`.
+Create a class that implements `IPanelButton`.  
+  
 Example:
-
 ```csharp
 public sealed class MyButton : IPanelButton
 {
@@ -91,19 +182,26 @@ public sealed class MyButton : IPanelButton
 
     public ButtonDefinition InventorButtonDefinition { get; }
 
-    public object? LargeIcon => null;
-    public object? StandardIcon => null;
+    private static readonly InventorButtonIcons Icons =
+        InventorIconConverter.FromFiles(
+            @"C:\Icons\hello16.png",
+            @"C:\Icons\hello32.png");
+
+    public object? StandardIcon => Icons.StandardIcon;
+    public object? LargeIcon => Icons.LargeIcon;
     public bool Pressed { get; set; }
 
     public MyButton(Inventor.Application app, string clientId)
     {
         if (app == null)
+        {
             throw new ArgumentNullException(nameof(app));
+        }
 
         if (string.IsNullOrWhiteSpace(clientId))
-            throw new ArgumentException(
+            {throw new ArgumentException(
                 "The client identifier must not be null, empty, or white-space.",
-                nameof(clientId));
+                nameof(clientId));}
 
         InventorButtonDefinition =
             app.CommandManager.ControlDefinitions.AddButtonDefinition(
@@ -111,10 +209,11 @@ public sealed class MyButton : IPanelButton
                 InternalName,
                 CommandTypesEnum.kShapeEditCmdType,
                 clientId,
-                "Tooltip",
-                DisplayName,
-                null,
-                null);
+                "Description Text",
+                "Tooltip Text",
+                StandardIcon,
+                LargeIcon,
+                ButtonDisplayEnum.kDisplayTextInLearningMode);
 
         InventorButtonDefinition.OnExecute += OnExecute;
     }
@@ -122,7 +221,7 @@ public sealed class MyButton : IPanelButton
     public void AddToPanel(IRibbonPanel panel, RibbonType environment)
     {
         if (panel == null)
-            throw new ArgumentNullException(nameof(panel));
+            {throw new ArgumentNullException(nameof(panel));}
 
         panel.AddButton(this, true, environment);
     }
@@ -148,9 +247,9 @@ Create button instances:
 ```csharp
 var buttons = new List<IPanelButton>
 {
-    new MyButton(inventorApp),
-    new MyPopup(inventorApp),
-    new MyComboBox(inventorApp)
+    new MyButton(inventorApp, myAddInGuid),
+    new MyPopup(inventorApp, myAddInGuid),
+    new MyComboBox(inventorApp, myAddInGuid)
 };
 ```
 
@@ -167,6 +266,7 @@ InventorRibbonBuilder.CreatePanelsAndButtonsForTab(
 Buttons are grouped by panel and ribbon environment. Existing tabs and panels are reused when their internal names match.
 
 ---
+
 
 ## 🔄 Supported Controls (`IRibbonPanel` Methods)
 
