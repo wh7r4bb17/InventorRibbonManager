@@ -1,46 +1,57 @@
-name: Pack NuGet
+name: Pack and Publish NuGet
 
 on:
   push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
+    tags:
+      - 'v*'
 
 jobs:
-  build-and-pack:
+  pack-and-publish:
     runs-on: windows-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x, 10.0.x
+          dotnet-version: |
+            8.0.x
+            10.0.x
 
       - name: Restore dependencies
         run: dotnet restore InventorRibbonManager/InventorRibbonManager.csproj
 
-      - name: Build Project
+      - name: Build project
         run: dotnet build InventorRibbonManager/InventorRibbonManager.csproj --configuration Release --no-restore
 
-      - name: Create NuGet Package
+      - name: Create NuGet package
         run: dotnet pack InventorRibbonManager/InventorRibbonManager.csproj --configuration Release --no-build --output nupkgs
 
-      - name: Upload NuGet Package as Artifact
+      - name: Upload NuGet package
         uses: actions/upload-artifact@v4
         with:
-          name: nuget-packages
-          path: nupkgs/
+          name: nuget-packages-${{ github.ref_name }}
+          path: nupkgs/*.nupkg
 
       - name: Publish to NuGet.org
         shell: pwsh
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
-          $packagePath = Get-ChildItem -Path nupkgs -Filter "wh7r4bb17.InventorRibbonManager*.nupkg" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          $packagePath = Get-ChildItem -Path nupkgs -Filter "wh7r4bb17.InventorRibbonManager*.nupkg" |
+            Where-Object { $_.Name -notlike "*.symbols.nupkg" } |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
           if ($packagePath) {
-              dotnet nuget push $packagePath.FullName --api-key "$env:NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+              dotnet nuget push $packagePath.FullName `
+                --api-key "$env:NUGET_API_KEY" `
+                --source "https://api.nuget.org/v3/index.json" `
+                --skip-duplicate
           } else {
-              Write-Error "No package found matching InventorRibbonManager*.nupkg"
+              Write-Error "No package found matching wh7r4bb17.InventorRibbonManager*.nupkg"
           }
