@@ -1,6 +1,6 @@
 The MIT License (MIT)
 
-Copyright © 2025 wh7r4bb17
+Copyright © 2025-2026 wh7r4bb17
 
 
 
