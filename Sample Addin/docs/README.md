@@ -1,5 +1,5 @@
 ﻿
-# Sample AddIn for Inventor 2025
+# Sample AddIn for Inventor 2027
 
 This example add-in shows the integration of the Ribbon Manager.
 A custon tab is created and a panel for each of the following controls.

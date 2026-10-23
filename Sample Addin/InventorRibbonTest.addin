@@ -1,5 +1,4 @@
 <Addin Type="Standard">
-	<!--Created for Autodesk Inventor Version 29.0-->
 	<ClassId>{4B4088C4-EB94-442B-9D77-61DBB5E1781D}</ClassId>
 	<ClientId>{4B4088C4-EB94-442B-9D77-61DBB5E1781D}</ClientId>
 	<DisplayName>Inventor Ribbon Test</DisplayName>
@@ -8,7 +7,7 @@
 	<LoadOnStartUp>1</LoadOnStartUp>
 	<UserUnloadable>1</UserUnloadable>
 	<Hidden>0</Hidden>
-	<SupportedSoftwareVersionGreaterThan>28..</SupportedSoftwareVersionGreaterThan>
+	<SupportedSoftwareVersionGreaterThan>30..</SupportedSoftwareVersionGreaterThan>
 	<DataVersion>1</DataVersion>
 	<UserInterfaceVersion>1</UserInterfaceVersion>
 </Addin>
